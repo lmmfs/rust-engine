@@ -1,4 +1,5 @@
 use anyhow::{Ok, Result};
+use tao::{event::{ElementState, Event, MouseButton, WindowEvent}, window};
 use std::time::Duration;
 
 mod engine;
@@ -10,6 +11,7 @@ struct State {
     box_position: (isize, isize),
     box_direction: (isize, isize),
     box_size: (usize, usize),
+    button_pressed: bool,
 }
 
 impl Default for State {
@@ -21,6 +23,7 @@ impl Default for State {
             box_position: Default::default(), 
             box_direction: (1, 1),
             box_size: (50, 60),
+            button_pressed: false,
         }
     }
 }
@@ -77,10 +80,17 @@ fn main() -> Result<()> {
             for y in s.box_position.1 as usize..s.box_position.1 as usize + s.box_size.1 {
                 for x in s.box_position.0 as usize..s.box_position.0 as usize + s.box_size.0 {
                     let i = ((y * width as usize + x) * 4) as usize;
-                    buf[i + 0] = 255;
-                    buf[i + 1] = 255;
-                    buf[i + 2] = 0;
-                    buf[i + 3] = 255;
+                    if s.button_pressed {
+                        buf[i + 0] = 255;
+                        buf[i + 1] = 0;
+                        buf[i + 2] = 0;
+                        buf[i + 3] = 255;
+                    } else {
+                        buf[i + 0] = 255;
+                        buf[i + 1] = 255;
+                        buf[i + 2] = 0;
+                        buf[i + 3] = 255;
+                    }
                 }
             }
 
@@ -96,6 +106,28 @@ fn main() -> Result<()> {
 
             surface.render()?;
 
+            Ok(())
+        },
+        |s, surface, _, event| {
+            match event {
+                Event::WindowEvent {
+                    event: win_event, ..
+                } => match win_event {
+                    WindowEvent::MouseInput {
+                        button: MouseButton::Left,
+                        state,
+                        ..
+                    } => {
+                        if state == &ElementState::Pressed {
+                            s.button_pressed = true;
+                        } else {
+                            s.button_pressed = false;
+                        }
+                    }
+                    _ => {}
+                },
+                _ => {}
+            }
             Ok(())
         });
 }

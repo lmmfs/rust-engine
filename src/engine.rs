@@ -3,11 +3,13 @@ use pixels::{Pixels, SurfaceTexture};
 use std::time::{Duration, Instant};
 use tao::dpi::LogicalSize;
 use tao::event::{Event, WindowEvent};
-use tao::event_loop::{ControlFlow, EventLoop};
-use tao::window::{Window, WindowBuilder};
+use tao::event_loop::{ControlFlow, EventLoop, EventLoopWindowTarget};
+use tao::window::{self, Window, WindowBuilder};
 
 type UpdateFn<State, Surface> = fn(&mut State, &mut Surface) -> Result<()>;
 type RenderFn<State, Surface> = fn(&mut State, &mut Surface, Duration) -> Result<()>;
+type TaoEventFn <State, Surface> = 
+    fn(&mut State, &mut Surface, &EventLoopWindowTarget<()>, event: &Event<()> ) -> Result<()>;
 
 pub struct PixelsSurface {
     pixels: Pixels,
@@ -74,7 +76,7 @@ pub fn init_pixels(context: &TaoContext, width: u32, height: u32) -> Result<Pixe
     Ok(PixelsSurface::new(pixels))
 }
 
-struct Engine<State, Surface> {
+struct EngineLoop<State, Surface> {
     accumulator: Duration,
     current_time: Instant,
     last_time: Instant,
@@ -85,7 +87,7 @@ struct Engine<State, Surface> {
     render: RenderFn<State, Surface>,
 }
 
-impl<State, Surface> Engine<State, Surface> {
+impl<State, Surface> EngineLoop<State, Surface> {
     pub fn create(
         update_fps: usize,
         state: State,
@@ -140,7 +142,7 @@ pub fn simple_run<State, Surface>(
     update: UpdateFn<State, Surface>,
     render: RenderFn<State, Surface>,
 ) -> Result<()> {
-    let mut engine = Engine::create(120, state, surface, update, render);
+    let mut engine = EngineLoop::create(120, state, surface, update, render);
 
     loop {
         engine.next_loop().context("run next engine loop")?;
@@ -153,25 +155,38 @@ pub fn run_with_tao_and_pixels<State: 'static>(
     surface: PixelsSurface,
     update: UpdateFn<State, PixelsSurface>,
     render: RenderFn<State, PixelsSurface>,
+    handle_event: TaoEventFn<State, PixelsSurface>,
 ) -> ! {
-    let mut engine = Engine::create(120, state, surface, update, render);
+    let mut engine = EngineLoop::create(120, state, surface, update, render);
 
     context
         .event_loop
-        .run(move |event, _, control_flow| match event {
-            Event::MainEventsCleared => {
-                engine
-                    .next_loop()
-                    .context("run next pixel loop")
-                    .unwrap();
-            }
-            Event::WindowEvent { event, .. } => match event {
-                WindowEvent::CloseRequested => {
-                    *control_flow = ControlFlow::Exit;
-                }
-                _ => {}
-            },
+        .run(move | event, window, control_flow| {
+            handle_event(
+                &mut engine.state, 
+                &mut engine.surface,
+                window,
+                &event,
+            )
+            .context("handling user events")
+            .unwrap();
 
-            _ => {}
+            match event {
+                Event::MainEventsCleared => {
+                    engine
+                        .next_loop()
+                        .context("run next pixel loop")
+                        .unwrap();
+                }
+                Event::WindowEvent { event, .. } 
+                    => match event {
+                        WindowEvent::CloseRequested => {
+                            *control_flow = ControlFlow::Exit;
+                        }
+                        _ => {}
+                    },
+    
+                _ => {}
+        }
         });
 }
