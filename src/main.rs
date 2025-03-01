@@ -1,7 +1,8 @@
 use anyhow::{Ok, Result};
 use tao::{event::{ElementState, Event, MouseButton, WindowEvent}, window};
 use std::time::Duration;
-use engine::{RenderSurface, Color};
+use engine::surfaces::RenderSurface;
+use engine::color::Color;
 
 mod engine;
 
