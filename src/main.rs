@@ -1,6 +1,7 @@
 use anyhow::{Ok, Result};
 use tao::{event::{ElementState, Event, MouseButton, WindowEvent}, window};
 use std::time::Duration;
+use engine::{RenderSurface, Color};
 
 mod engine;
 
@@ -12,6 +13,8 @@ struct State {
     box_direction: (isize, isize),
     box_size: (usize, usize),
     button_pressed: bool,
+    cursor_position: (u32, u32),
+    swap_color: bool,
 }
 
 impl Default for State {
@@ -24,6 +27,8 @@ impl Default for State {
             box_direction: (1, 1),
             box_size: (50, 60),
             button_pressed: false,
+            cursor_position: (0, 0),
+            swap_color: false,
         }
     }
 }
@@ -34,7 +39,7 @@ fn main() -> Result<()> {
     let height = 480;
     let state = State::default();
 
-    let context = engine::init_tao_window("Title", width, height)?;
+    let context = engine::init_tao_window("Rust Engine", width, height)?;
     let surface = engine::init_pixels(&context, width, height)?;
 
     engine::run_with_tao_and_pixels(
@@ -49,12 +54,14 @@ fn main() -> Result<()> {
             || s.box_position.0 < 0 {
                 s.box_direction.0 = s.box_direction.0 * -1;
                 s.box_position.0 = s.box_position.0 + s.box_direction.0;
+                s.swap_color = !s.swap_color;
             }
 
             if s.box_position.1 + s.box_size.1 as isize >= surface.height() as isize 
             || s.box_position.1 < 0 {
                 s.box_direction.1 = s.box_direction.1 * -1;
                 s.box_position.1 = s.box_position.1 + s.box_direction.1;
+                s.swap_color = !s.swap_color;
             }
 
             s.updates_called += 1;
@@ -64,34 +71,24 @@ fn main() -> Result<()> {
         |s, surface, dt| {
             let width = surface.width();
             let height = surface.height();
-            let buf = surface.frame_mut();
 
-            // Clear background
-            for y in 0..height {
-                for x in 0..width {
-                    let i = ((y * width + x) * 4) as usize;
-                    buf[i + 0] = 0;
-                    buf[i + 1] = 0;
-                    buf[i + 2] = 0;
-                    buf[i + 3] = 255;
-                }
-            }
-
-            for y in s.box_position.1 as usize..s.box_position.1 as usize + s.box_size.1 {
-                for x in s.box_position.0 as usize..s.box_position.0 as usize + s.box_size.0 {
-                    let i = ((y * width as usize + x) * 4) as usize;
-                    if s.button_pressed {
-                        buf[i + 0] = 255;
-                        buf[i + 1] = 0;
-                        buf[i + 2] = 0;
-                        buf[i + 3] = 255;
-                    } else {
-                        buf[i + 0] = 255;
-                        buf[i + 1] = 255;
-                        buf[i + 2] = 0;
-                        buf[i + 3] = 255;
-                    }
-                }
+            surface.clear_screen(&Color::from_rgb(0, 0, 0));
+            if s.swap_color {
+                surface.filled_rect(
+                    s.box_position.0 as u32, 
+                    s.box_position.1 as u32, 
+                    s.box_size.0 as u32, 
+                    s.box_size.1 as u32, 
+                    &Color::from_rgb(255, 0, 0)
+                );
+            } else {
+                surface.filled_rect(
+                    s.box_position.0 as u32, 
+                    s.box_position.1 as u32, 
+                    s.box_size.0 as u32, 
+                    s.box_size.1 as u32, 
+                    &Color::from_rgb(255, 255, 0)
+                );
             }
 
             s.renders_called += 1;
@@ -104,7 +101,7 @@ fn main() -> Result<()> {
                 s.time_passed = Duration::default();
             }
 
-            surface.render()?;
+            surface.blit()?;
 
             Ok(())
         },
@@ -123,6 +120,12 @@ fn main() -> Result<()> {
                         } else {
                             s.button_pressed = false;
                         }
+                    }
+                    WindowEvent::CursorMoved { position, .. } => {
+                        let pixel_position= surface
+                            .physical_pos_to_surface_pos(position.x, position.y)
+                            .unwrap_or((0, 0));
+                        s.cursor_position = pixel_position;
                     }
                     _ => {}
                 },
